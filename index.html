@@ -1,0 +1,222 @@
+
++<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>React URL Shortener</title>
+  <script crossorigin src="https://unpkg.com/react@18/umd/react.development.js"></script>
+  <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      max-width: 800px;
+      margin: auto;
+      padding: 20px;
+    }
+    input {
+      width: 100%;
+      margin-top: 5px;
+      margin-bottom: 10px;
+      padding: 8px;
+      box-sizing: border-box;
+    }
+    button {
+      margin-top: 10px;
+      padding: 10px 15px;
+      font-size: 16px;
+    }
+    .url-block {
+      border: 1px solid #ccc;
+      padding: 10px;
+      margin-bottom: 15px;
+    }
+    .error {
+      color: red;
+    }
+    a {
+      color: blue;
+      cursor: pointer;
+    }
+  </style>
+</head>
+<body>
+  <h1>React URL Shortener</h1>
+  <div id="root"></div>
+  <script type="text/javascript">
+    const e = React.createElement;
+    const { useState } = React;
+
+    const isValidUrl = (url) => {
+      try {
+        new URL(url);
+        return true;
+      } catch {
+        return false;
+      }
+    };
+
+    const generateShortCode = (existingCodes) => {
+      const chars = 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
+      let code;
+      do {
+        code = '';
+        for (let i = 0; i < 6; i++) {
+          code += chars.charAt(Math.floor(Math.random() * chars.length));
+        }
+      } while (existingCodes.has(code));
+      return code;
+    };
+
+    function App() {
+      const [urls, setUrls] = React.useState([
+        { original: '', validity: '', shortcode: '', error: '' },
+      ]);
+      const [shortenedUrls, setShortenedUrls] = React.useState([]);
+
+      const handleInputChange = (index, field, value) => {
+        const newUrls = [...urls];
+        newUrls[index][field] = value;
+        newUrls[index].error = '';
+        setUrls(newUrls);
+      };
+
+      const validateInputs = () => {
+        let valid = true;
+        const newUrls = urls.map((url) => {
+          let error = '';
+          if (!url.original || !isValidUrl(url.original)) {
+            error = 'Invalid URL';
+            valid = false;
+          }
+          if (url.validity && (!/^\d+$/.test(url.validity) || parseInt(url.validity) <= 0)) {
+            error = 'Validity must be a positive integer';
+            valid = false;
+          }
+          return { ...url, error };
+        });
+        setUrls(newUrls);
+        return valid;
+      };
+
+      const handleAddUrl = () => {
+        if (urls.length < 5) {
+          setUrls([...urls, { original: '', validity: '', shortcode: '', error: '' }]);
+        }
+      };
+
+      const handleShorten = () => {
+        if (!validateInputs()) return;
+
+        const existingCodes = new Set(shortenedUrls.map((u) => u.shortcode));
+        const newShortened = urls.map((url) => {
+          let code = url.shortcode.trim();
+          if (!code) {
+            code = generateShortCode(existingCodes);
+          } else if (existingCodes.has(code)) {
+            code = generateShortCode(existingCodes);
+          }
+          existingCodes.add(code);
+
+          const validityMinutes = url.validity ? parseInt(url.validity) : 30;
+          const createdAt = new Date();
+          const expiresAt = new Date(createdAt.getTime() + validityMinutes * 60000);
+
+          return {
+            original: url.original,
+            shortcode: code,
+            createdAt,
+            expiresAt,
+            clicks: 0,
+            clickDetails: [],
+          };
+        });
+
+        setShortenedUrls([...shortenedUrls, ...newShortened]);
+        setUrls([{ original: '', validity: '', shortcode: '', error: '' }]);
+      };
+
+      const handleClickShortUrl = (index) => {
+        const newShortened = [...shortenedUrls];
+        const now = new Date();
+        if (now > newShortened[index].expiresAt) {
+          alert('This short URL has expired.');
+          return;
+        }
+        newShortened[index].clicks += 1;
+        newShortened[index].clickDetails.push({
+          timestamp: now.toLocaleString(),
+          source: 'Direct Click',
+          location: 'Unknown',
+        });
+        setShortenedUrls(newShortened);
+        window.open(newShortened[index].original, '_blank');
+      };
+
+      return e('div', null,
+        urls.map((url, idx) =>
+          e('div', { key: idx, className: 'url-block' },
+            e('label', null, 'Original URL:',
+              e('input', {
+                type: 'text',
+                value: url.original,
+                onChange: (e) => handleInputChange(idx, 'original', e.target.value),
+                placeholder: 'https://example.com',
+              })
+            ),
+            e('label', null, 'Validity (minutes, optional, default 30):',
+              e('input', {
+                type: 'text',
+                value: url.validity,
+                onChange: (e) => handleInputChange(idx, 'validity', e.target.value),
+                placeholder: '30',
+              })
+            ),
+            e('label', null, 'Preferred Shortcode (optional):',
+              e('input', {
+                type: 'text',
+                value: url.shortcode,
+                onChange: (e) => handleInputChange(idx, 'shortcode', e.target.value),
+                placeholder: 'custom123',
+              })
+            ),
+            url.error && e('div', { className: 'error' }, url.error)
+          )
+        ),
+        urls.length < 5 && e('button', { onClick: handleAddUrl }, 'Add Another URL'),
+        e('br'),
+        e('button', { onClick: handleShorten }, 'Shorten URLs'),
+        e('h2', null, 'Shortened URLs'),
+        shortenedUrls.length === 0 && e('p', null, 'No URLs shortened yet.'),
+        shortenedUrls.map((url, idx) =>
+          e('div', { key: idx, style: { border: '1px solid #888', padding: 10, marginBottom: 10 } },
+            e('div', null, e('strong', null, 'Original URL: '), url.original),
+            e('div', null,
+              e('strong', null, 'Short URL: '),
+              e('a', {
+                href: '#!',
+                onClick: () => handleClickShortUrl(idx),
+                style: { color: 'blue', cursor: 'pointer' }
+              }, `https://short.url/${url.shortcode}`)
+            ),
+            e('div', null, e('strong', null, 'Created At: '), url.createdAt.toLocaleString()),
+            e('div', null, e('strong', null, 'Expires At: '), url.expiresAt.toLocaleString()),
+            e('div', null, e('strong', null, 'Total Clicks: '), url.clicks),
+            url.clicks > 0 && e('div', null,
+              e('strong', null, 'Click Details:'),
+              e('ul', null,
+                url.clickDetails.map((click, i) =>
+                  e('li', { key: i }, `${click.timestamp} - ${click.source} - ${click.location}`)
+                )
+              )
+            )
+          )
+        )
+      );
+    }
+
+    const domContainer = document.querySelector('#root');
+    ReactDOM.createRoot(domContainer).render(e(App));
+  </script>
+</body>
+</html>
